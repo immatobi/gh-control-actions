@@ -1,0 +1,99 @@
+name: Deploy Application
+on:
+  push:
+    branches:
+      - 'master'
+      - 'staging'
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout [download] code
+        uses: actions/checkout@v4
+      - name: Install NodeJs
+        uses: actions/setup-node@v3
+        with: 
+          node-version: 18
+      - name: Cache Dependences
+        id: cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: deps-node-modules-${{ hashFiles('**/package-lock.json') }}
+      - name: Install dependencies
+        run: npm install --force
+      - name: Lint Codebase
+        run: npm run lint
+  test:
+    needs: ['lint']
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout [download] code
+        uses: actions/checkout@v4
+      - name: Install NodeJs
+        uses: actions/setup-node@v3
+        with: 
+          node-version: 18
+      - name: Cache Dependences
+        id: cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: deps-node-modules-${{ hashFiles('**/package-lock.json') }}
+      - name: Install dependencies
+        run: npm install --force
+      - name: Run Unit Tests
+        id: run-test
+        run: npm test
+      - name: Upload Test Report
+        if: steps.run-test.outcome == 'failure'
+        uses: actions/upload-artifact@v3
+        with: 
+          name: test-report
+          path: test.json
+  build:
+    needs: [test]
+    runs-on: ubuntu-latest
+    outputs:
+      script-file: ${{ steps.publish.outputs.script-file }}
+    steps:
+      - name: Checkout [download] code
+        uses: actions/checkout@v4
+      - name: Install NodeJs
+        uses: actions/setup-node@v3
+        with: 
+          node-version: 18
+      - name: Cache Dependences
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: deps-node-modules-${{ hashFiles('**/package-lock.json') }}
+      - name: Install dependencies
+        run: npm install --force
+      - name: Build Project
+        id: build
+        run: npm run build
+      - name: Publish JS file name
+        id: publish
+        run: find dist/assets/*.js -type f -execdir echo 'script-file={}' >> $GITHUB_OUTPUT ';'
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: dist-files
+          path: |
+            dist
+            package.json
+  deploy:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Built Artifact
+        uses: actions/download-artifact@v3
+        with: 
+          name: dist-files
+      - name: Output contents
+        run: ls
+      - name: Output Filename
+        run: echo "${{ needs.build.outputs.script-file }}"
+      - name: Deploy
+        run: echo "Deploying..."
